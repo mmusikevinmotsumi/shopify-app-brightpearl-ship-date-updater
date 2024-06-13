@@ -3,7 +3,7 @@
 client_id = "90429a936ffe57e30347ad9a813faca8"
 name = "bright-pearl-ship-date-updater"
 handle = "bright-pearl-ship-date-updater"
-application_url = "https://officially-balanced-designed-closer.trycloudflare.com"
+application_url = "https://phpbb-tiny-reasoning-incurred.trycloudflare.com"
 embedded = true
 
 [build]
@@ -17,9 +17,9 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://officially-balanced-designed-closer.trycloudflare.com/auth/callback",
-  "https://officially-balanced-designed-closer.trycloudflare.com/auth/shopify/callback",
-  "https://officially-balanced-designed-closer.trycloudflare.com/api/auth/callback"
+  "https://phpbb-tiny-reasoning-incurred.trycloudflare.com/auth/callback",
+  "https://phpbb-tiny-reasoning-incurred.trycloudflare.com/auth/shopify/callback",
+  "https://phpbb-tiny-reasoning-incurred.trycloudflare.com/api/auth/callback"
 ]
 
 [webhooks]
