@@ -1,0 +1,20 @@
+{
+    "name": "kevin/brightpearl-ship-date-updater",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "Kevin\\BrightpearlShipDateUpdater\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "mmusikevinmotsumi",
+            "email": "mmusikevinmotsumi@gmail.com"
+        }
+    ],
+    "require": {
+        "guzzlehttp/guzzle": "^7.8",
+        "luketowers/php-shopify-api": "^1.1",
+        "vlucas/phpdotenv": "^5.6"
+    }
+}
