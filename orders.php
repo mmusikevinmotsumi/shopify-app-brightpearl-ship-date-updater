@@ -31,49 +31,49 @@ function getFulfilledOrders($client, $shopifyBaseUrl) {
 
 getFulfilledOrders($client, $shopifyBaseUrl);
 
-// function updateBrightPearlOrder($client, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId, $orderId, $shipDate) {
-//     try {
-//         // Update custom field
-//         $response = $client->request('PATCH', "$brightpearlBaseUrl/order-service/order/$orderId/custom-field/", [
-//             'json' => [
-//                 'customFieldId' => 'eCommerce Ship Date',
-//                 'value' => $shipDate
-//             ],
-//             'headers' => [
-//                 'Authorization' => "Bearer $brightpearlApiToken",
-//                 'Content-Type' => 'application/json'
-//             ]
-//         ]);
+function updateBrightPearlOrder($client, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId, $orderId, $shipDate) {
+    try {
+        // Update custom field
+        $response = $client->request('PATCH', "$brightpearlBaseUrl/order-service/order/$orderId/custom-field/", [
+            'json' => [
+                'customFieldId' => 'eCommerce Ship Date',
+                'value' => $shipDate
+            ],
+            'headers' => [
+                'Authorization' => "Bearer $brightpearlApiToken",
+                'Content-Type' => 'application/json'
+            ]
+        ]);
 
-//         // Update Goods Out Note as shipped
-//         $response = $client->request('POST', "$brightpearlBaseUrl/warehouse-service/goods-out-note-event", [
-//             'json' => [
-//                 'goodsOutNoteId' => $orderId,
-//                 'status' => 'shipped',
-//                 'warehouseId' => $brightpearlWarehouseId
-//             ],
+        // Update Goods Out Note as shipped
+        $response = $client->request('POST', "$brightpearlBaseUrl/warehouse-service/goods-out-note-event", [
+            'json' => [
+                'goodsOutNoteId' => $orderId,
+                'status' => 'shipped',
+                'warehouseId' => $brightpearlWarehouseId
+            ],
 
-//             'headers' => [
-//                 'Authorization' => "Bearer $brightpearlApiToken",
-//                 'Content-Type' => 'application/json'
-//             ]
-//         ]);
+            'headers' => [
+                'Authorization' => "Bearer $brightpearlApiToken",
+                'Content-Type' => 'application/json'
+            ]
+        ]);
 
-//     } catch (Exception $e) {
-//         echo "Error updating BrightPearl for order $orderId: ",  $e->getMessage(), "\n";
-//     }
-// }
+    } catch (Exception $e) {
+        echo "Error updating BrightPearl for order $orderId: ",  $e->getMessage(), "\n";
+    }
+}
 
-// function updateOrders($client, $shopifyBaseUrl, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId) {
-//     $orders = getFulfilledOrders($client, $shopifyBaseUrl);
-//     foreach ($orders as $order) {
-//         if (isset($order['fulfillments'][0])) {
-//             $fulfillment = $order['fulfillments'][0];
-//             $shipDate = substr($fulfillment['created_at'], 0, 10); // Get only the date part
-//             updateBrightPearlOrder($client, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId, $order['id'], $shipDate);
-//         }
-//     }
-// }
+function updateOrders($client, $shopifyBaseUrl, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId) {
+    $orders = getFulfilledOrders($client, $shopifyBaseUrl);
+    foreach ($orders as $order) {
+        if (isset($order['fulfillments'][0])) {
+            $fulfillment = $order['fulfillments'][0];
+            $shipDate = substr($fulfillment['created_at'], 0, 10); // Get only the date part
+            updateBrightPearlOrder($client, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId, $order['id'], $shipDate);
+        }
+    }
+}
 
-// // Update orders immediately
-// updateOrders($client, $shopifyBaseUrl, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId);
+// Update orders immediately
+updateOrders($client, $shopifyBaseUrl, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId);

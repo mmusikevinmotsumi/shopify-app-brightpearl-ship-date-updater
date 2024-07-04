@@ -13,13 +13,20 @@ $shopifyApiKey = $_ENV['SHOPIFY_API_KEY'];
 $shopifyPassword = $_ENV['SHOPIFY_PASSWORD'];
 $shopifyStoreName = $_ENV['SHOPIFY_STORE_NAME'];
 $shopifyToken = $_ENV['SHOPIFY_TOKEN'];
+
 $brightpearlApiToken = $_ENV['BRIGHTPEARL_API_TOKEN'];
 $brightpearlAccount = $_ENV['BRIGHTPEARL_ACCOUNT'];
 $brightpearlWarehouseId = $_ENV['BRIGHTPEARL_WAREHOUSE_ID'];
+$brightpearlAppRef = $_ENV['BRIGHTPEARL_APP_REF'];
+$brightpearlDevRef = $_ENV['BRIGHTPEARL_DEV_REF'];
 
+$servername = $_ENV['DBSERVER'];
+$username = $_ENV['DBUSER'];
+$password = $_ENV['DBPW'];
+$dbname = $_ENV['DBNAME'];
 
 $shopifyBaseUrl = "https://" . $shopifyStoreName . ".myshopify.com/admin/api/2024-04";
-$brightpearlBaseUrl = "https://ws-eu1.brightpearl.com/".$brightpearlAccount;
+$brightpearlBaseUrl = "https://use1.brightpearlconnect.com/public-api/".$brightpearlAccount;
 
 $client = new Client();
 
@@ -77,6 +84,36 @@ function getFulfilledOrders($client, $shopifyBaseUrl, $shopifyToken)
         $page++;
     } while (!empty($data['orders']));
     
+    global $servername;
+    global $username;
+    global $password;
+    global $dbname;
+
+    // Create connection
+    $conn = new mysqli($servername, $username, $password, $dbname);
+
+    if ($conn->connect_error) {
+        die("Connection failed: " . $conn->connect_error);
+    }
+    
+    // Loop through orders and insert into database
+    foreach ($orders as $order) {
+        $order_id = $order['id'];
+        $created_at = $order['created_at'];
+        $total_price = $order['total_price'];
+        $financial_status = $order['financial_status'];
+        $fulfillment_status = $order['fulfillment_status'];
+        $sync_to_brightpearl = ''
+    
+        $sql = "INSERT INTO {$shopifyStoreName}_orders (order_id, created_at, total_price, financial_status, fulfillment_status, sync_to_brightpearl) VALUES ({$order_id}, {$created_at}, {$total_price}, {$financial_status}, {$fulfillment_status}, {$sync_to_brightpearl})";
+        
+        if ($conn->query($sql) !== TRUE) {
+            echo "Error: " . $sql . "<br>" . $conn->error;
+        }
+    }
+    
+    $conn->close();
+
     // Now $orders contains all the orders from January 2023
     echo 'Total orders fetched: ' . count($orders) . "\n";
     ?>
@@ -97,7 +134,7 @@ function getFulfilledOrders($client, $shopifyBaseUrl, $shopifyToken)
                     <td class="Polaris-IndexTable__TableCell"><?php echo $order['name'] ?></td>
                     <td class="Polaris-IndexTable__TableCell"><?php echo $fulfillment['status'] ?></td>
                     <td class="Polaris-IndexTable__TableCell"><?php echo $shipDate ?></td>
-                    <td class="Polaris-IndexTable__TableCell"><?php echo (check_sync($order['id'])) ? 'Synced' : '--'; ?></td>
+                    <td class="Polaris-IndexTable__TableCell"><?php echo (check_sync($client, $order['name'])) ?></td>
                 </tr>
             <?php
                 // echo "Order ID: " . $order['id'] . "\n" . "Ship Date: " . $shipDate . "\n";
@@ -113,37 +150,52 @@ function getFulfilledOrders($client, $shopifyBaseUrl, $shopifyToken)
     // print_r($orders);
 }
 
-function check_sync($order_id){
+function check_sync($client, $order_id){
+
+    global $brightpearlDevRef;
+    global $brightpearlAppRef;
+    global $brightpearlBaseUrl;
+    global $brightpearlApiToken;
+
+    $url = $brightpearlBaseUrl."/order-service/order-search";
+    $queryParams = http_build_query(['customerRef' => $order_id]);
+
+    try {
+        $response = $client->request(
+            'GET',
+            "{$url}",
+            [
+                'headers' => [
+                    'Authorization' => "Bearer ".$brightpearlApiToken,
+                    'Content-Type' => 'application/json',
+                    'brightpearl-dev-ref' => $brightpearlDevRef,
+                    'brightpearl-app-ref' => $brightpearlAppRef
+                ]
+            ]
+        );
+
+        $body = json_decode($response->getBody()->getContents(), true);
+
+        // Filter out orders and return the custom field "PCF_ECOMSHIP"
+        return count($body['response']);
+        // $orders = [];
+        // foreach ($body['response'] as $order) {
+        //     if (isset($order['order']['customFields']['PCF_ECOMSHIP'])) {
+        //         $orders[] = [
+        //             'orderId' => $order['order']['id'],
+        //             'PCF_ECOMSHIP' => $order['order']['customFields']['PCF_ECOMSHIP']
+        //         ];
+        //     }
+        // }
+
+        // return count($orders);
+    }
+    catch(Exception $e){
+         echo "Error finding order #:" . $order_id . " in BrightPearl.\n",  $e->getMessage(), "\n";
+    }
+
     return true;
 }
-// function getNumberOfOrders($client, $shopifyBaseUrl, $shopifyToken)
-// {
-//     try {
-//         $response = $client->request(
-//             'GET',
-//             $shopifyBaseUrl . "/orders/count.json",
-//             [
-//                 'headers' => [
-//                     'X-Shopify-Access-Token' => $shopifyToken,
-//                     'Content-Type' => 'application/json'
-//                 ]
-//             ]
-//         );
-
-//         $body = $response->getBody()->getContents();
-//         $data = json_decode($body, true); // Parse the JSON response
-
-//         if (isset($data['count'])) {
-//             echo "Total Shopify Orders: " . $data['count']."\n";
-//         } else {
-//             echo "Count not found in the response";
-//         }
-
-//     } catch (Exception $e) {
-//         echo 'Error fetching orders from Shopify: ',  $e->getMessage(), "\n";
-//         return [];
-//     }
-// }
 
 function updateOrders($client, $shopifyBaseUrl, $brightpearlBaseUrl, $brightpearlApiToken, $brightpearlWarehouseId) {
 
