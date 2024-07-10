@@ -57,7 +57,7 @@ function createOrderTable()
             financial_status VARCHAR(255) NOT NULL,
             fulfillment_status VARCHAR(255),
             brightpearl_ECOMSHIP DATE,
-            brightpearl_GoodsOutNote VARCHAR(10)
+            brightpearl_GoodsOutNote VARCHAR(255)
         )";
         
         if ($conn->query($createTableSql) === TRUE) {
@@ -322,7 +322,7 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
             [
                 'headers' => [
                     'Authorization' => "Bearer " . $brightpearlApiToken,
-                    'Content-Type' => 'application/json',
+                    'Content-Type' => 'application/x-www-form-urlencoded',
                     'brightpearl-dev-ref' => $brightpearlDevRef,
                     'brightpearl-app-ref' => $brightpearlAppRef
                 ]
@@ -332,46 +332,64 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
         $result = json_decode($response->getBody()->getContents(), true);
 
         // Check if PCF_ECOMSHIP was updated successfully
-        if (isset($result['response'][0]['status']['shipped']) && $result['response'][0]['status']['shipped'] === true) {
-            return 'shipped';
-        } else {
-            $url = $brightpearlBaseUrl."/warehouse-service/goods-note/goods-out/" . $orderId . "/event";
-            $body = [
-                "events" => [
-                    [
-                        "eventCode" => "SHW",
-                        "occured" => $shipped_at,
-                        "eventOwnerId" => 74672
-                    ]
-                ]
-            ];
-            try {
-                $response = $client->request(
-                    'POST',
-                    $url,
-                    [
-                        'headers' => [
-                            'Authorization' => "Bearer ".$brightpearlApiToken,
-                            'Content-Type' => 'application/json',
-                            'brightpearl-dev-ref' => $brightpearlDevRef,
-                            'brightpearl-app-ref' => $brightpearlAppRef
-                        ],
-                        'json' => $body
-                    ]
-                );
+        $notes = "";
 
-                return 'shipped';
-            } catch (Exception $e) {
-                error_log("Error updating Goods-Out Note for order #:" . $orderId . " in BrightPearl.\n");
-                error_log($e->getMessage() . "\n");
-                return NULL; 
+        foreach($result['response'] as $noteId=>$res){
+            $notes = $notes . 'Note ID: ' . $noteId . "\n";
+            if (isset($res['status']['shipped'])) {
+                $notes = $notes . 'shipped: ' . $res['status']['shipped'] . "\n";
+            } 
+            if (isset($res['status']['packed'])) {
+                $notes = $notes . 'packed: ' . $res['status']['packed'] . "\n";
+            }
+            if (isset($res['status']['picked'])) {
+                $notes = $notes . 'picked: ' . $res['status']['picked'] . "\n";
+            }
+            if (isset($res['status']['printed'])) {
+                $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
             }
         }
+        
+        return $notes;
+        // else {
+            
+        //     $url = $brightpearlBaseUrl."/warehouse-service/goods-note/goods-out/" . $orderId . "/event";
+        //     $body = [
+        //         "events" => [
+        //             [
+        //                 "eventCode" => "SHW",
+        //                 "occured" => $shipped_at,
+        //                 "eventOwnerId" => 74672
+        //             ]
+        //         ]
+        //     ];
+        //     try {
+        //         $response = $client->request(
+        //             'POST',
+        //             $url,
+        //             [
+        //                 'headers' => [
+        //                     'Authorization' => "Bearer ".$brightpearlApiToken,
+        //                     'Content-Type' => 'application/json',
+        //                     'brightpearl-dev-ref' => $brightpearlDevRef,
+        //                     'brightpearl-app-ref' => $brightpearlAppRef
+        //                 ],
+        //                 'json' => $body
+        //             ]
+        //         );
+
+        //         return 'shipped';
+        //     } catch (Exception $e) {
+        //         error_log("Error updating Goods-Out Note for order #:" . $orderId . " in BrightPearl.\n");
+        //         error_log($e->getMessage() . "\n");
+        //         return NULL; 
+        //     }
+        // }
 
     } catch (Exception $e) {
         error_log("Error fetching Goods-Out Note for order #: " . $orderId . " in BrightPearl.\n");
         error_log($e->getMessage() . "\n");
-        return NULL; 
+        return "Error fetching GON"; 
     }
 }
 
