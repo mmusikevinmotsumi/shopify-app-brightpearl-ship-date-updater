@@ -16,6 +16,7 @@ $shopifyToken = $_ENV['SHOPIFY_TOKEN'];
 $tableName = $shopifyStoreName . "_orders";
 
 $brightpearlApiToken = $_ENV['BRIGHTPEARL_API_TOKEN'];
+$brightpearlRefreshToken = $_ENV['BRIGHTPEARL_REFRESH_TOKEN'];
 $brightpearlAccount = $_ENV['BRIGHTPEARL_ACCOUNT'];
 $brightpearlWarehouseId = $_ENV['BRIGHTPEARL_WAREHOUSE_ID'];
 $brightpearlAppRef = $_ENV['BRIGHTPEARL_APP_REF'];
@@ -251,8 +252,17 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
         }
     }
     catch(Exception $e){
+        $responseBody = $e->getResponse()->getBody()->getContents();
         error_log("Error finding order #:" . $order_id . " in BrightPearl.\n");
-        error_log($e->getMessage(), "\n");
+        error_log($e->getMessage(). "\n");
+        if (strpos($responseBody, 'Authorization token expired') !== false) {
+            // Token expired, refresh the token
+            refreshBrightpearlToken($client);
+            
+            // Restart the app
+            createOrderTable();
+            get_orders_from_database();
+        }
     }
 
 }
@@ -269,7 +279,7 @@ function update_brightpearl_shipdate($client, $orderId, $shipped_at) {
         [
             "op" => "replace",
             "path" => "/PCF_ECOMSHIP",
-            "value" => (new DateTime($shipped_at))->format('Y-m-d')
+            "value" => (new DateTime($shipped_at))->format('Y-m-d') . "T00:00:00.000-05:00" 
         ]
     ];
 
@@ -391,6 +401,41 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
         error_log($e->getMessage() . "\n");
         return "Error fetching GON"; 
     }
+}
+
+function refreshBrightpearlToken($client) {
+    global $brightpearlApiToken, $brightpearlRefreshToken, $brightpearlAccount, $brightpearlAppRef;
+
+    try {
+        $response = $client->post('https://oauth.brightpearlapp.com/token/'.$brightpearlAccount, [
+            'form_params' => [
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $brightpearlRefreshToken,
+                'client_id' => $brightpearlAppRef
+                // Include any other necessary parameters here
+            ]
+        ]);
+
+        $data = json_decode($response->getBody(), true);
+        $newApiToken = $data['access_token'];
+        $newRefreshToken = $data['refresh_token'];
+
+        // Update the .env file with the new tokens
+        updateEnvFile($newApiToken, $newRefreshToken);
+    } catch (ClientException $e) {
+        $responseBody = $e->getResponse()->getBody()->getContents();
+        error_log('Error refreshing token: ' . $e->getMessage() . "\nResponse: " . $responseBody);
+    }
+}
+
+function updateEnvFile($apiToken, $refreshToken) {
+    $envFilePath = __DIR__ . '/.env';
+    $envContent = file_get_contents($envFilePath);
+
+    $envContent = preg_replace('/^BRIGHTPEARL_API_TOKEN=.*$/m', 'BRIGHTPEARL_API_TOKEN=' . $apiToken, $envContent);
+    $envContent = preg_replace('/^BRIGHTPEARL_REFRESH_TOKEN=.*$/m', 'BRIGHTPEARL_REFRESH_TOKEN=' . $refreshToken, $envContent);
+
+    file_put_contents($envFilePath, $envContent);
 }
 
 createOrderTable();
