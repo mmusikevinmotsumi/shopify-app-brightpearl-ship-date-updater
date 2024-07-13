@@ -9,12 +9,7 @@ $dotenv->load();
 $cssPath = './css/style.css';
 echo '<link rel="stylesheet" type="text/css" href="' . $cssPath . '">';
 
-$shopifyApiKey = $_ENV['SHOPIFY_API_KEY'];
-$shopifyPassword = $_ENV['SHOPIFY_PASSWORD'];
-$shopifyStoreName = $_ENV['SHOPIFY_STORE_NAME'];
-$shopifyToken = $_ENV['SHOPIFY_TOKEN'];
-$tableName = $shopifyStoreName . "_orders";
-
+// Brightpearl connection parameters
 $brightpearlApiToken = $_ENV['BRIGHTPEARL_API_TOKEN'];
 $brightpearlRefreshToken = $_ENV['BRIGHTPEARL_REFRESH_TOKEN'];
 $brightpearlAccount = $_ENV['BRIGHTPEARL_ACCOUNT'];
@@ -22,16 +17,43 @@ $brightpearlWarehouseId = $_ENV['BRIGHTPEARL_WAREHOUSE_ID'];
 $brightpearlAppRef = $_ENV['BRIGHTPEARL_APP_REF'];
 $brightpearlDevRef = $_ENV['BRIGHTPEARL_DEV_REF'];
 
+// Database connection parameters
 $servername = $_ENV['DBSERVER'];
 $username = $_ENV['DBUSER'];
 $password = $_ENV['DBPW'];
 $dbname = $_ENV['DBNAME'];
 
+// Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
 
+// Check connection
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
+
+$shopifyApiKey = $_ENV['SHOPIFY_API_KEY'];
+$shopifyPassword = $_ENV['SHOPIFY_PASSWORD'];
+$shopifyStoreName = $_ENV['SHOPIFY_STORE_NAME'];
+
+// $headers = getallheaders();
+// if (isset($headers['X-Shopify-Shop-Domain'])) {
+//     $shopifyStoreName = $headers['X-Shopify-Shop-Domain'];
+//     echo "Shop name: " . $shopifyStoreName;
+// } else {
+//     echo "Shop domain header is missing.";
+// }
+
+// $shopifyStoreName = $_SESSION['shop'];
+// $shopifyStoreName = getStoreNameFromUrl($_SERVER['REQUEST_URI']);
+
+if ($shopifyStoreName !== null && $shopifyStoreName !== '') {
+    // echo "Store name: " . $shopifyStoreName;
+    $shopifyToken = getAccessToken($conn, $shopifyStoreName);
+    $tableName = $shopifyStoreName . "_orders";
+} else {
+    // echo "Store name not found.";
+}
+
 
 $shopifyBaseUrl = "https://" . $shopifyStoreName . ".myshopify.com/admin/api/2024-04";
 $brightpearlBaseUrl = "https://use1.brightpearlconnect.com/public-api/".$brightpearlAccount;
@@ -189,7 +211,7 @@ function get_orders_from_database(){
         echo '<form action="index.php" method="post"><button type="submit" name="resync_orders">Sync All Orders</button></form></div>';
 
         echo "<table border='1' id='leadstbl'>";
-        echo "<tr><th>ID</th><th>Order ID</th><th>Created At</th><th>Ship Date</th><th>Total Price</th><th>Payment Status</th><th>Fulfillment Status</th><th>Brightpearl PCF_ECOMSHIP</th><th>Brightpearl brightpearl_GoodsOutNote</th></tr>";
+        echo "<tr><th>ID</th><th>Order ID</th><th>Created At</th><th>Ship Date</th><th>Total Price</th><th>Payment Status</th><th>Fulfillment Status</th><th>Brightpearl PCF_ECOMSHIP</th><th>Brightpearl_GoodsOutNote</th></tr>";
         
         // Output data of each row
         while ($row = $result->fetch_assoc()) {
@@ -436,6 +458,34 @@ function updateEnvFile($apiToken, $refreshToken) {
     $envContent = preg_replace('/^BRIGHTPEARL_REFRESH_TOKEN=.*$/m', 'BRIGHTPEARL_REFRESH_TOKEN=' . $refreshToken, $envContent);
 
     file_put_contents($envFilePath, $envContent);
+}
+
+function getStoreNameFromUrl($url) {
+    // Use parse_url to get the path component of the URL
+    $parsedUrl = parse_url($url);
+    $path = $parsedUrl['path'];
+
+    // Use a regular expression to extract the store name
+    preg_match('/\/store\/([^\/]+)\//', $path, $matches);
+
+    if (isset($matches[1])) {
+        return $matches[1];
+    } else {
+        return null;
+    }
+}
+
+function getAccessToken($conn, $shopifyStoreName) {
+    // Prepare the SQL statement
+    $result = $conn->query("SELECT access_token FROM `shop_details` WHERE shopify_store_name = '" . $shopifyStoreName.".myshopify.com'");
+    if ($result) {
+        $row = $result->fetch_assoc();
+        return $row['access_token'];
+    }
+    else{
+        die("Connection failed: " . $conn->error);
+        return null;
+    }
 }
 
 createOrderTable();

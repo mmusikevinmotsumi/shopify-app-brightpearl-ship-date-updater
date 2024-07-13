@@ -64,10 +64,12 @@ if (hash_equals($hmac, $computed_hmac)) {
 	// Show the access token (don't do this in production!)
     //Here is the place where you can store the access token to the database
 
+	session_start();
+
 	echo 'App Successfully Installed!<br>';
 	echo 'Access Token:' . $access_token;
+    $_SESSION['shop'] = $shopifyStoreName;
 
-	create_token_table($tableName);
 	sync_token_to_database($tableName, $shopifyStoreName, $access_token);
 
 } else {
@@ -75,52 +77,30 @@ if (hash_equals($hmac, $computed_hmac)) {
 	die('This request is NOT from Shopify!');
 }
 
-function create_token_table($tableName)
-{
-    global $conn;
-
-    // Create table
-    $result = $conn->query("SHOW TABLES LIKE '".$tableName."'");
-
-    if ($result->num_rows == 0) {
-        // Create the table if it does not exist
-        $createTableSql = "CREATE TABLE `".$tableName."` (
-            id INT(10) AUTO_INCREMENT PRIMARY KEY,
-            shopify_store_name VARCHAR(255) NOT NULL,
-            access_token VARCHAR(255) NOT NULL,
-            updated_at TIMESTAMP NOT NULL
-        )";
-        
-        // if ($conn->query($createTableSql) === TRUE) {
-        //     echo "Table ".$tableName." created successfully.";
-        // } else {
-        //     echo "Error creating table: " . $mysqli->error;
-        // }
-    } else {
-
-	}
-}
 function sync_token_to_database($tableName, $shopifyStoreName, $access_token)
 {
     global $conn;
 	$updated_at = date('Y-m-d H:i:s');
 
-	$sql = $conn->query("SELECT * FROM `".$tableName."` WHERE shopify_store_name = `".$shopifyStoreName."`");
-	if ($sql->num_rows > 0) {
-		$update_sql = "UPDATE ".$tableName.
-		"SET 
-		access_token = `".$access_token."`,
-		updated_at = `".$updated_at."`
-		WHERE shopify_store_name = `".$shopifyStoreName."`";
-	}
-	else{
-		$result = $conn->query("INSERT INTO `" . $tableName . "_orders` (" .
-		"shopify_store_name, access_token, updated_at) " .
-		"VALUES (" .
-		"'" . $shopifyStoreName . "', " .
-		"'" . $access_token . "', " .
-		"'" . $updated_at . "')");
-	}
+	$stmt = $conn->prepare("SELECT * FROM `$tableName` WHERE shopify_store_name = ?");
+    $stmt->bind_param('s', $shopifyStoreName);
+    $stmt->execute();
+    $result = $stmt->get_result();
 
+	if ($result->num_rows > 0) {
+        // Update the existing record
+        $update_stmt = $conn->prepare("UPDATE `$tableName` SET access_token = ?, updated_at = ? WHERE shopify_store_name = ?");
+        $update_stmt->bind_param('sss', $access_token, $updated_at, $shopifyStoreName);
+        $update_stmt->execute();
+        $update_stmt->close();
+    } else {
+        // Insert a new record
+        $insert_stmt = $conn->prepare("INSERT INTO `" . $tableName . "` (shopify_store_name, access_token, updated_at) VALUES (?, ?, ?)");
+        $insert_stmt->bind_param('sss', $shopifyStoreName, $access_token, $updated_at);
+        $insert_stmt->execute();
+        $insert_stmt->close();
+    }
+
+    $stmt->close();
     $conn->close();
 }
