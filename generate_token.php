@@ -1,7 +1,7 @@
 <?php
 
 // Get our helper functions
-require_once("inc/functions.php");
+// require_once("inc/functions.php");
 
 // Set variables for our request
 require 'vendor/autoload.php';
