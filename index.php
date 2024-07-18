@@ -45,8 +45,13 @@
             }
             echo "</table></div>";
         } else {
-            echo '<div class="content"><div class="table-top-container"><p>Total orders fetched: ' . $result->num_rows . "</p>";
+            echo '<div class="content"><div class="table-top-container"><p>Total orders fetched: ' . $result->num_rows . '</p>';
             echo '<form action="https://soodletech.com/brightpearl-ship-date-updater/sync_orders.php?shop='.$shopifyStoreName.'" method="post"><button type="submit" name="resync_orders">Sync All Orders</button></form></div></div>';
+        }
+        if (!$result){
+            echo '<div class="content"><div class="table-top-container"><p>Store is not connected to database. </p>';
+            echo '<form action="https://soodletech.com/brightpearl-ship-date-updater/sync_orders.php?shop='.$shopifyStoreName.'" method="post"><button type="submit" name="resync_orders">Sync All Orders</button></form></div></div>';
+
         }
         
         

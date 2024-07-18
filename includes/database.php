@@ -29,7 +29,7 @@ function fetchStoreNames($conn) {
             $stores[] = $row['shopify_store_name'];
         }
     } else {
-        die("Error fetching store names: " . $conn->error);
+        echo "Error fetching stores.<br>" . $conn->error;
     }
     return $stores;
 }

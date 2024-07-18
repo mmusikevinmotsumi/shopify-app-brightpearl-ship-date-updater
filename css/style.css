@@ -4,7 +4,8 @@ body{
     margin: 0;
 }
 .sidebar {
-    width: 300px;
+    width: 30%;
+    max-width: 300px;
     background-color: #f4f4f4;
     padding: 15px;
     box-shadow: 2px 0 5px rgba(0,0,0,0.1);

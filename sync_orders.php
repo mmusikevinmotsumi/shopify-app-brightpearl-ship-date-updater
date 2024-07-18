@@ -2,6 +2,10 @@
 require 'vendor/autoload.php';
 require 'includes/database.php';
 require 'includes/brightpearl.php';
+ini_set('memory_limit', '4096M'); // 4GB
+ini_set('max_execution_time', '3600'); // 1 hour
+ini_set('max_input_time', '3600');     // 1 hour
+
 
 use GuzzleHttp\Client;
 use Dotenv\Dotenv;
@@ -124,6 +128,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
     
     // Loop through orders and insert into database
     foreach ($orders as $order) {
+        usleep(600000); 
         $order_id = $order['name'];
         $financial_status = $order['financial_status'];
         $fulfillment_status = $order['fulfillment_status'];
