@@ -46,7 +46,7 @@ table#leadstbl, th, td {
 }
 .table-top-container{
     display: flex;
-    max-width: 1000px;
+    max-width: 1200px;
     align-items: center;
 }
 .table-top-container p{
@@ -65,7 +65,7 @@ table#leadstbl, th, td {
     cursor: pointer;
 }
 table#leadstbl {
-    max-width: 1000px;
+    max-width: 1200px;
     width: 100%;
     text-align: center;
     border: solid 1px rgb(235, 235, 235);

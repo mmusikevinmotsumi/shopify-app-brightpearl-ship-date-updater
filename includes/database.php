@@ -3,7 +3,8 @@
 require './vendor/autoload.php';
 
 use Dotenv\Dotenv;
-$dotenv = Dotenv::createImmutable('/home2/soodlete/public_html/brightpearl-ship-date-updater');
+// $dotenv = Dotenv::createImmutable('/home2/soodlete/public_html/brightpearl-ship-date-updater');
+$dotenv = Dotenv::createImmutable(__DIR__ . '/..');
 
 $dotenv->load();
 

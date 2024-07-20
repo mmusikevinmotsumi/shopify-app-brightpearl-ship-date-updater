@@ -3,8 +3,8 @@ require 'vendor/autoload.php';
 require 'includes/database.php';
 require 'includes/brightpearl.php';
 ini_set('memory_limit', '4096M'); // 4GB
-ini_set('max_execution_time', '3600'); // 1 hour
-ini_set('max_input_time', '3600');     // 1 hour
+ini_set('max_execution_time', '0'); // unlimited
+ini_set('max_input_time', '0');     // 1 hour
 
 
 use GuzzleHttp\Client;
@@ -22,7 +22,7 @@ if ($shopifyStoreName !== null && $shopifyStoreName !== '') {
     $shopifyToken = getAccessToken($conn, $shopifyStoreName);
     $tableName = $shopifyStoreName . "_orders";
 } else {
-    // echo "Store name not found.";
+    echo "Store name not found in URL parameter.";
 }
 
 
@@ -45,13 +45,13 @@ function createOrderTable()
             id INT(10) AUTO_INCREMENT PRIMARY KEY,
             order_id VARCHAR(255) NOT NULL,
             created_at TIMESTAMP NOT NULL,
-            shipped_at TIMESTAMP,
+            shipped_at TIMESTAMP NULL DEFAULT NULL,
             total_price DECIMAL(10, 2) NOT NULL,
             financial_status VARCHAR(255) NOT NULL,
             fulfillment_status VARCHAR(255),
-            brightpearl_ECOMSHIP DATE,
+            brightpearl_ECOMSHIP VARCHAR(255),
             brightpearl_GoodsOutNote VARCHAR(255),
-            synced_at TIMESTAMP
+            synced_at TIMESTAMP NULL DEFAULT NULL
         )";
         
         if ($conn->query($createTableSql) === TRUE) {
@@ -77,8 +77,12 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
     $orders = [];
     $page = 1;
     $limit = 250;  // You can adjust the limit to the maximum allowed by Shopify (which is 250)
-    $created_at_min = '2023-01-01T00:00:00Z'; 
-    $created_at_max = date('Y-m-d H:i:s'); 
+    $created_at_min = '2022-12-31T18:00:00Z'; 
+    date_default_timezone_set('UTC');
+    $utcDate = new DateTime('now', new DateTimeZone('UTC'));
+    $utcDate->setTimezone(new DateTimeZone('America/Chicago'));
+    $utcDate->setTime(2, 30, 0);
+    $created_at_max = $utcDate->format('Y-m-d H:i:s');
 
     $url = $shopifyBaseUrl . "/orders.json?status=any&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
 
@@ -126,25 +130,27 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
         $page++;
     } while (!empty($data['orders']));
     
+    usort($orders, function($a, $b) {
+        return strcmp($a['created_at'], $b['created_at']);
+    });
+
     // Loop through orders and insert into database
     foreach ($orders as $order) {
-        usleep(600000); 
+        if ($order['fulfillment_status'] != 'fulfilled') {
+            continue; // Skip the order if it is not fulfilled
+        }
         $order_id = $order['name'];
         $financial_status = $order['financial_status'];
         $fulfillment_status = $order['fulfillment_status'];
         $created_at = $order['created_at'];
         $shipped_at = isset($order['fulfillments'][0]) ? $order['fulfillments'][0]['created_at'] : NULL;
         $total_price = $order['total_price'];
-        $synced_at = date('Y-m-d H:i:s');
+        $synced_at = $created_at_max;
 
         if ($fulfillment_status == 'fulfilled') {
+            usleep(600000); 
             list($brightpearl_ECOMSHIP, $brightpearl_GoodsOutNote) = update_brightpearl_fields($client, $order_id, $shipped_at);
-        } else {
-            $fulfillment_status = 'unfulfilled';
-            $brightpearl_ECOMSHIP = NULL;
-            $brightpearl_GoodsOutNote = NULL;
-            $synced_at = NULL;
-        }
+        } 
         
         $stmt = $conn->prepare("INSERT INTO `" . $shopifyStoreName . "_orders` (
             order_id, created_at, shipped_at, total_price, financial_status, fulfillment_status, brightpearl_ECOMSHIP, brightpearl_GoodsOutNote, synced_at
@@ -208,7 +214,7 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
                 return [update_brightpearl_shipdate($client, $orderId, $shipped_at), update_brightpearl_goodsout($client, $orderId, $shipped_at)];
             }
         } else {
-            return [NULL, NULL];
+            return ['Error finding order #', 'Error finding order #'];
         }
     }
     catch(Exception $e){
@@ -216,13 +222,11 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
         error_log("Error finding order #:" . $order_id . " in BrightPearl.\n");
         error_log($e->getMessage(). "\n");
         if (strpos($responseBody, 'Authorization token expired') !== false) {
-            // Token expired, refresh the token
             refreshBrightpearlToken($client);
-            
-            // Restart the app
             createOrderTable();
-            get_orders_from_database();
+            sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
         }
+        return [$responseBody, $responseBody];
     }
 
 }
@@ -258,21 +262,16 @@ function update_brightpearl_shipdate($client, $orderId, $shipped_at) {
             ]
         );
 
-        $result = json_decode($response->getBody()->getContents(), true);
-
-        // Check if PCF_ECOMSHIP was updated successfully
-        if (isset($result['response']['PCF_ECOMSHIP'])) {
-            return $result['response']['PCF_ECOMSHIP'];
-        } else {
-            error_log("Error updating PCF_ECOMSHIP for order #:" . $orderId . " in BrightPearl.\n");
-            error_log($e->getMessage() . "\n");
-            return null; // Handle if PCF_ECOMSHIP wasn't updated
-        }
-
+        return (new DateTime($shipped_at))->format('Y-m-d');        
     } catch (Exception $e) {
         error_log("Error patching PCF_ECOMSHIP for order #: " . $orderId . " in BrightPearl.\n");
         error_log($e->getMessage() . "\n");
-        return null; // Handle the error gracefully, possibly log it
+        $responseBody = $e->getResponse()->getBody()->getContents();
+        if (strpos($responseBody, 'Authorization token expired') !== false) {
+            refreshBrightpearlToken($client);
+            return update_brightpearl_shipdate($client, $orderId, $shipped_at);
+        }
+        return "No channel connected";
     }
 }
 
@@ -301,25 +300,35 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
 
         $result = json_decode($response->getBody()->getContents(), true);
 
-        // Check if PCF_ECOMSHIP was updated successfully
         $notes = "";
 
-        foreach($result['response'] as $noteId=>$res){
-            $notes = $notes . 'Note ID: ' . $noteId . "\n";
-            if (isset($res['status']['shipped'])) {
-                $notes = $notes . 'shipped: ' . $res['status']['shipped'] . "\n";
-            } 
-            if (isset($res['status']['packed'])) {
-                $notes = $notes . 'packed: ' . $res['status']['packed'] . "\n";
-            }
-            if (isset($res['status']['picked'])) {
-                $notes = $notes . 'picked: ' . $res['status']['picked'] . "\n";
-            }
-            if (isset($res['status']['printed'])) {
-                $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
+        if (empty($result['response'])){
+            $notes = "No GON found";
+        }
+        else{
+            foreach($result['response'] as $noteId=>$res){
+                $notes = $notes . 'Note ID: ' . $noteId . "\n";
+                if (isset($res['status']['shipped']) && $res['status']['shipped'] == 1) {
+                    $notes = $notes . 'shipped: ' . $res['status']['shipped'] . "\n";
+                } 
+                if (isset($res['status']['packed']) && $res['status']['packed'] == 1) {
+                    $notes = $notes . 'packed: ' . $res['status']['packed'] . "\n";
+                }
+                if (isset($res['status']['picked']) && $res['status']['picked'] == 1) {
+                    $notes = $notes . 'picked: ' . $res['status']['picked'] . "\n";
+                }
+                if (isset($res['status']['printed']) && $res['status']['printed'] == 1) {
+                    $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
+                }
+                if (!isset($res['status']['shipped']) && !isset($res['status']['packed']) && !isset($res['status']['picked']) && !isset($res['status']['printed'])) {
+                    $notes = "No GON found";
+                }
+                if ($res['status']['shipped'] == 0 && $res['status']['packed'] == 0 && $res['status']['picked'] == 0 && $res['status']['printed'] ==0) {
+                    $notes = "No GON found";
+                }
             }
         }
-        
+
         return $notes;
         // else {
             
@@ -411,14 +420,25 @@ function getAccessToken($conn, $shopifyStoreName) {
     }
 }
 
-createOrderTable();
-sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['resync_orders'])) {
-    // Call the PHP function
-    ob_clean();
-    createOrderTable();
-    sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
-    get_orders_from_database();
+function getBaseUrl() {
+    // Check if HTTPS is being used
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
+    
+    // Get the server name
+    $host = $_SERVER['HTTP_HOST'];
+    
+    // Get the request URI and remove the script name from it
+    $requestUri = $_SERVER['REQUEST_URI'];
+    $scriptName = $_SERVER['SCRIPT_NAME'];
+    $baseDir = str_replace(basename($scriptName), '', $scriptName);
+    
+    // Construct the base URL
+    $baseUrl = $protocol . $host . $baseDir;
+    
+    return $baseUrl;
 }
 
+createOrderTable();
+sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
+header("Location: " . getBaseUrl() . 'index.php?shop=' . $shopifyStoreName);
+ 
