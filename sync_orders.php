@@ -45,13 +45,13 @@ function createOrderTable()
             id INT(10) AUTO_INCREMENT PRIMARY KEY,
             order_id VARCHAR(255) NOT NULL,
             created_at TIMESTAMP NOT NULL,
-            shipped_at TIMESTAMP,
+            shipped_at TIMESTAMP NULL DEFAULT NULL,
             total_price DECIMAL(10, 2) NOT NULL,
             financial_status VARCHAR(255) NOT NULL,
             fulfillment_status VARCHAR(255),
-            brightpearl_ECOMSHIP DATE,
+            brightpearl_ECOMSHIP VARCHAR(255),
             brightpearl_GoodsOutNote VARCHAR(255),
-            synced_at TIMESTAMP
+            synced_at TIMESTAMP NULL DEFAULT NULL
         )";
         
         if ($conn->query($createTableSql) === TRUE) {
@@ -136,7 +136,6 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
 
     // Loop through orders and insert into database
     foreach ($orders as $order) {
-        usleep(600000); 
         if ($order['fulfillment_status'] != 'fulfilled') {
             continue; // Skip the order if it is not fulfilled
         }
@@ -149,13 +148,9 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
         $synced_at = $created_at_max;
 
         if ($fulfillment_status == 'fulfilled') {
+            usleep(300000); 
             list($brightpearl_ECOMSHIP, $brightpearl_GoodsOutNote) = update_brightpearl_fields($client, $order_id, $shipped_at);
-        } else {
-            // $fulfillment_status = 'unfulfilled';
-            $brightpearl_ECOMSHIP = NULL;
-            $brightpearl_GoodsOutNote = NULL;
-            $synced_at = NULL;
-        }
+        } 
         
         $stmt = $conn->prepare("INSERT INTO `" . $shopifyStoreName . "_orders` (
             order_id, created_at, shipped_at, total_price, financial_status, fulfillment_status, brightpearl_ECOMSHIP, brightpearl_GoodsOutNote, synced_at
@@ -219,7 +214,7 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
                 return [update_brightpearl_shipdate($client, $orderId, $shipped_at), update_brightpearl_goodsout($client, $orderId, $shipped_at)];
             }
         } else {
-            return [NULL, NULL];
+            return ['Error finding order #', 'Error finding order #'];
         }
     }
     catch(Exception $e){
@@ -231,7 +226,7 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
             createOrderTable();
             sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
         }
-        return [NULL, NULL];
+        return [$responseBody, $responseBody];
     }
 
 }
@@ -274,9 +269,37 @@ function update_brightpearl_shipdate($client, $orderId, $shipped_at) {
         $responseBody = $e->getResponse()->getBody()->getContents();
         if (strpos($responseBody, 'Authorization token expired') !== false) {
             refreshBrightpearlToken($client);
-            return updateBrightpearlShipdate($client, $orderId, $shipped_at);
+            return update_brightpearl_shipdate($client, $orderId, $shipped_at);
         }
-        return NULL;
+        if (strpos($responseBody, 'no such path') !== false) {
+            $body = [
+                [
+                    "op" => "add",
+                    "path" => "/PCF_ECOMSHIP",
+                    "value" => (new DateTime($shipped_at))->format('Y-m-d') . "T00:00:00.000-05:00" 
+                ]
+            ];
+            try {
+                $response = $client->request(
+                    'PATCH',
+                    $url,
+                    [
+                        'headers' => [
+                            'Authorization' => "Bearer ".$brightpearlApiToken,
+                            'Content-Type' => 'application/json',
+                            'brightpearl-dev-ref' => $brightpearlDevRef,
+                            'brightpearl-app-ref' => $brightpearlAppRef
+                        ],
+                        'json' => $body
+                    ]
+                );
+        
+                return (new DateTime($shipped_at))->format('Y-m-d');        
+            }
+            catch (Exception $e) {
+                return $e->getMessage();   
+            }
+        }
     }
 }
 
@@ -307,22 +330,33 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
 
         $notes = "";
 
-        foreach($result['response'] as $noteId=>$res){
-            $notes = $notes . 'Note ID: ' . $noteId . "\n";
-            if (isset($res['status']['shipped'])) {
-                $notes = $notes . 'shipped: ' . $res['status']['shipped'] . "\n";
-            } 
-            if (isset($res['status']['packed'])) {
-                $notes = $notes . 'packed: ' . $res['status']['packed'] . "\n";
-            }
-            if (isset($res['status']['picked'])) {
-                $notes = $notes . 'picked: ' . $res['status']['picked'] . "\n";
-            }
-            if (isset($res['status']['printed'])) {
-                $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
+        if (empty($result['response'])){
+            $notes = "Error: No GON fields";
+        }
+        else{
+            foreach($result['response'] as $noteId=>$res){
+                $notes = $notes . 'Note ID: ' . $noteId . "\n";
+                if (isset($res['status']['shipped']) && $res['status']['shipped'] == 1) {
+                    $notes = $notes . 'shipped: ' . $res['status']['shipped'] . "\n";
+                } 
+                if (isset($res['status']['packed']) && $res['status']['packed'] == 1) {
+                    $notes = $notes . 'packed: ' . $res['status']['packed'] . "\n";
+                }
+                if (isset($res['status']['picked']) && $res['status']['picked'] == 1) {
+                    $notes = $notes . 'picked: ' . $res['status']['picked'] . "\n";
+                }
+                if (isset($res['status']['printed']) && $res['status']['printed'] == 1) {
+                    $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
+                }
+                if (!isset($res['status']['shipped']) && !isset($res['status']['packed']) && !isset($res['status']['picked']) && !isset($res['status']['printed'])) {
+                    $notes = "Error: None of packed, printed, picked, shipped is set.";
+                }
+                if ($res['status']['shipped'] == 0 && $res['status']['packed'] == 0 && $res['status']['picked'] == 0 && $res['status']['printed'] ==0) {
+                    $notes = "packed:0, printed:0, packed:0, shipped:0";
+                }
             }
         }
-        
+
         return $notes;
         // else {
             
