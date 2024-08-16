@@ -148,7 +148,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
         $synced_at = $created_at_max;
 
         if ($fulfillment_status == 'fulfilled') {
-            usleep(600000); 
+            usleep(300000); 
             list($brightpearl_ECOMSHIP, $brightpearl_GoodsOutNote) = update_brightpearl_fields($client, $order_id, $shipped_at);
         } 
         
@@ -222,6 +222,7 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
         error_log("Error finding order #:" . $order_id . " in BrightPearl.\n");
         error_log($e->getMessage(). "\n");
         if (strpos($responseBody, 'Authorization token expired') !== false) {
+            echo 'Authorization token expired';
             refreshBrightpearlToken($client);
             createOrderTable();
             sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
@@ -271,7 +272,35 @@ function update_brightpearl_shipdate($client, $orderId, $shipped_at) {
             refreshBrightpearlToken($client);
             return update_brightpearl_shipdate($client, $orderId, $shipped_at);
         }
-        return "No channel connected";
+        if (strpos($responseBody, 'no such path') !== false) {
+            $body = [
+                [
+                    "op" => "add",
+                    "path" => "/PCF_ECOMSHIP",
+                    "value" => (new DateTime($shipped_at))->format('Y-m-d') . "T00:00:00.000-05:00" 
+                ]
+            ];
+            try {
+                $response = $client->request(
+                    'PATCH',
+                    $url,
+                    [
+                        'headers' => [
+                            'Authorization' => "Bearer ".$brightpearlApiToken,
+                            'Content-Type' => 'application/json',
+                            'brightpearl-dev-ref' => $brightpearlDevRef,
+                            'brightpearl-app-ref' => $brightpearlAppRef
+                        ],
+                        'json' => $body
+                    ]
+                );
+        
+                return (new DateTime($shipped_at))->format('Y-m-d');        
+            }
+            catch (Exception $e) {
+                return $e->getMessage();   
+            }
+        }
     }
 }
 
@@ -303,7 +332,7 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
         $notes = "";
 
         if (empty($result['response'])){
-            $notes = "No GON found";
+            $notes = "Error: No GON fields";
         }
         else{
             foreach($result['response'] as $noteId=>$res){
@@ -321,10 +350,10 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
                     $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
                 }
                 if (!isset($res['status']['shipped']) && !isset($res['status']['packed']) && !isset($res['status']['picked']) && !isset($res['status']['printed'])) {
-                    $notes = "No GON found";
+                    $notes = "Error: None of packed, printed, picked, shipped is set.";
                 }
                 if ($res['status']['shipped'] == 0 && $res['status']['packed'] == 0 && $res['status']['picked'] == 0 && $res['status']['printed'] ==0) {
-                    $notes = "No GON found";
+                    $notes = "packed:0, printed:0, packed:0, shipped:0";
                 }
             }
         }
