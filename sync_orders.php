@@ -77,14 +77,22 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
     $orders = [];
     $page = 1;
     $limit = 250;  // You can adjust the limit to the maximum allowed by Shopify (which is 250)
-    $created_at_min = '2022-12-31T18:00:00Z'; 
+    // $created_at_min = '2022-12-31T18:00:00Z'; 
+    
+    if ($_GET['created_at_min'] !== null && $_GET['created_at_min'] !== '') {
+        $created_at_min = $_GET['created_at_min'];
+    }
+    else{
+        $created_at_min = '2023-01-01T05:00:00Z';
+    }
     date_default_timezone_set('UTC');
     $utcDate = new DateTime('now', new DateTimeZone('UTC'));
     $utcDate->setTimezone(new DateTimeZone('America/Chicago'));
     $utcDate->setTime(2, 30, 0);
     $created_at_max = $utcDate->format('Y-m-d H:i:s');
 
-    $url = $shopifyBaseUrl . "/orders.json?status=any&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
+    // $url = $shopifyBaseUrl . "/orders.json?status=any&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
+    $url = $shopifyBaseUrl . "/orders.json?status=any&fulfillment_status=shipped&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
 
     do {
         $response = $client->request(
@@ -134,11 +142,28 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
         return strcmp($a['created_at'], $b['created_at']);
     });
 
+    // Prepare the DELETE statement to remove records from the specific date and later
+    $stmt = $conn->prepare("DELETE FROM `" . $shopifyStoreName . "_orders` WHERE created_at >= ?");
+
+    // Bind the date parameter to the statement
+    $stmt->bind_param("s", $created_at_min);
+
+    // Execute the statement
+    if ($stmt->execute()) {
+        echo "Records with created_at date " . $created_at_min . " and later have been removed.";
+    } else {
+        echo "Error removing records: " . $stmt->error;
+    }
+
+    // Close the statement
+    $stmt->close();
+
+
     // Loop through orders and insert into database
     foreach ($orders as $order) {
-        if ($order['fulfillment_status'] != 'fulfilled') {
-            continue; // Skip the order if it is not fulfilled
-        }
+        // if ($order['fulfillment_status'] != 'fulfilled') {
+        //     continue; // Skip the order if it is not fulfilled
+        // }
         $order_id = $order['name'];
         $financial_status = $order['financial_status'];
         $fulfillment_status = $order['fulfillment_status'];
@@ -148,7 +173,6 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
         $synced_at = $created_at_max;
 
         if ($fulfillment_status == 'fulfilled') {
-            usleep(300000); 
             list($brightpearl_ECOMSHIP, $brightpearl_GoodsOutNote) = update_brightpearl_fields($client, $order_id, $shipped_at);
         } 
         
@@ -186,6 +210,8 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
     global $brightpearlAppRef;
     global $brightpearlBaseUrl;
     global $brightpearlApiToken;
+    global $shopifyBaseUrl;
+    global $shopifyToken;
 
     $url = $brightpearlBaseUrl."/order-service/order-search";
     $queryParams = http_build_query(['customerRef' => $order_id]);
@@ -203,6 +229,8 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
                 ]
             ]
         );
+        // Extract response headers
+        check_brightpearl_response($response);
 
         $body = json_decode($response->getBody()->getContents(), true);
 
@@ -227,6 +255,18 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
             sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
         }
         return [$responseBody, $responseBody];
+    }
+
+}
+
+function check_brightpearl_response($response){
+    $headers = $response->getHeaders();
+    $requestsRemaining = isset($headers['brightpearl-requests-remaining'][0]) ? (int)$headers['brightpearl-requests-remaining'][0] : null;
+    $nextThrottlePeriod = isset($headers['brightpearl-next-throttle-period'][0]) ? (int)$headers['brightpearl-next-throttle-period'][0] : null;
+
+    // Check if requests remaining is 0 and if so, pause the app
+    if ($requestsRemaining < 5 && $nextThrottlePeriod !== null) {
+        sleep($nextThrottlePeriod / 1000); // Convert milliseconds to seconds
     }
 
 }
@@ -261,11 +301,12 @@ function update_brightpearl_shipdate($client, $orderId, $shipped_at) {
                 'json' => $body
             ]
         );
+        check_brightpearl_response($response);
 
         return (new DateTime($shipped_at))->format('Y-m-d');        
     } catch (Exception $e) {
-        error_log("Error patching PCF_ECOMSHIP for order #: " . $orderId . " in BrightPearl.\n");
-        error_log($e->getMessage() . "\n");
+        // error_log("Error patching PCF_ECOMSHIP for order #: " . $orderId . " in BrightPearl.\n");
+        // error_log($e->getMessage() . "\n");
         $responseBody = $e->getResponse()->getBody()->getContents();
         if (strpos($responseBody, 'Authorization token expired') !== false) {
             refreshBrightpearlToken($client);
@@ -293,6 +334,7 @@ function update_brightpearl_shipdate($client, $orderId, $shipped_at) {
                         'json' => $body
                     ]
                 );
+                check_brightpearl_response($response);
         
                 return (new DateTime($shipped_at))->format('Y-m-d');        
             }
@@ -325,6 +367,7 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
                 ]
             ]
         );
+        check_brightpearl_response($response);
 
         $result = json_decode($response->getBody()->getContents(), true);
 
@@ -332,67 +375,77 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
 
         if (empty($result['response'])){
             $notes = "Error: No GON fields";
+            return $notes;
         }
         else{
             foreach($result['response'] as $noteId=>$res){
-                $notes = $notes . 'Note ID: ' . $noteId . "\n";
-                if (isset($res['status']['shipped']) && $res['status']['shipped'] == 1) {
-                    $notes = $notes . 'shipped: ' . $res['status']['shipped'] . "\n";
-                } 
-                if (isset($res['status']['packed']) && $res['status']['packed'] == 1) {
-                    $notes = $notes . 'packed: ' . $res['status']['packed'] . "\n";
+                $url = $brightpearlBaseUrl."/warehouse-service/goods-note/goods-out/" . $noteId . "/event";
+                $body = [
+                    "events" => [
+                        [
+                            "eventCode" => "SHW",
+                            "occured" => date('Y-m-d\TH:i:s.000P', strtotime($shipped_at)),
+                            "eventOwnerId" => (int)$noteId
+                        ]
+                    ]
+                ];
+                try {
+                    $response = $client->request(
+                        'POST',
+                        $url,
+                        [
+                            'headers' => [
+                                'Authorization' => "Bearer ".$brightpearlApiToken,
+                                'Content-Type' => 'application/json',
+                                'brightpearl-dev-ref' => $brightpearlDevRef,
+                                'brightpearl-app-ref' => $brightpearlAppRef
+                            ],
+                            'json' => $body
+                        ]
+                    );
+                    check_brightpearl_response($response);
+
+                    $statusCode = $response->getStatusCode();
+                    $responseBody = $response->getBody()->getContents();
+                
+                    // Log the status and response for debugging
+                    error_log("Response Status Code: " . $statusCode);
+                    error_log("Response Body: " . $responseBody);
+
+                    $notes .= "\nNote ID: " . $noteId . ' shipped: 1 packed: 1 picked: 1 printed: 1';
+                } catch (Exception $e) {
+                    error_log("Error updating Goods-Out Note for Note ID:" . $orderId . " in BrightPearl.\n");
+                    error_log($e->getMessage() . "\n");
+                    if (strpos($e->getMessage(), '409 Conflict') !== false){
+                        $notes .= "\nNote ID: " . $noteId . ' shipped: 1 packed: 1 picked: 1 printed: 1';
+                    }
+                    else{
+                        $notes .= "\nNote ID: " . $noteId . "\n" . $e->getMessage(); 
+                    }
                 }
-                if (isset($res['status']['picked']) && $res['status']['picked'] == 1) {
-                    $notes = $notes . 'picked: ' . $res['status']['picked'] . "\n";
-                }
-                if (isset($res['status']['printed']) && $res['status']['printed'] == 1) {
-                    $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
-                }
-                if (!isset($res['status']['shipped']) && !isset($res['status']['packed']) && !isset($res['status']['picked']) && !isset($res['status']['printed'])) {
-                    $notes = "Error: None of packed, printed, picked, shipped is set.";
-                }
-                if ($res['status']['shipped'] == 0 && $res['status']['packed'] == 0 && $res['status']['picked'] == 0 && $res['status']['printed'] ==0) {
-                    $notes = "packed:0, printed:0, packed:0, shipped:0";
-                }
+
+                // $notes = $notes . 'Note ID: ' . $noteId . "\n";
+                // if (isset($res['status']['shipped']) && $res['status']['shipped'] == 1) {
+                //     $notes = $notes . 'shipped: ' . $res['status']['shipped'] . "\n";
+                // } 
+                // if (isset($res['status']['packed']) && $res['status']['packed'] == 1) {
+                //     $notes = $notes . 'packed: ' . $res['status']['packed'] . "\n";
+                // }
+                // if (isset($res['status']['picked']) && $res['status']['picked'] == 1) {
+                //     $notes = $notes . 'picked: ' . $res['status']['picked'] . "\n";
+                // }
+                // if (isset($res['status']['printed']) && $res['status']['printed'] == 1) {
+                //     $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
+                // }
+                // if (!isset($res['status']['shipped']) && !isset($res['status']['packed']) && !isset($res['status']['picked']) && !isset($res['status']['printed'])) {
+                //     $notes = "Error: None of packed, printed, picked, shipped is set.";
+                // }
+                // if ($res['status']['shipped'] == 0 && $res['status']['packed'] == 0 && $res['status']['picked'] == 0 && $res['status']['printed'] ==0) {
+                //     $notes = "packed:0, printed:0, packed:0, shipped:0";
+                // }
             }
+            return $notes;
         }
-
-        return $notes;
-        // else {
-            
-        //     $url = $brightpearlBaseUrl."/warehouse-service/goods-note/goods-out/" . $orderId . "/event";
-        //     $body = [
-        //         "events" => [
-        //             [
-        //                 "eventCode" => "SHW",
-        //                 "occured" => $shipped_at,
-        //                 "eventOwnerId" => 74672
-        //             ]
-        //         ]
-        //     ];
-        //     try {
-        //         $response = $client->request(
-        //             'POST',
-        //             $url,
-        //             [
-        //                 'headers' => [
-        //                     'Authorization' => "Bearer ".$brightpearlApiToken,
-        //                     'Content-Type' => 'application/json',
-        //                     'brightpearl-dev-ref' => $brightpearlDevRef,
-        //                     'brightpearl-app-ref' => $brightpearlAppRef
-        //                 ],
-        //                 'json' => $body
-        //             ]
-        //         );
-
-        //         return 'shipped';
-        //     } catch (Exception $e) {
-        //         error_log("Error updating Goods-Out Note for order #:" . $orderId . " in BrightPearl.\n");
-        //         error_log($e->getMessage() . "\n");
-        //         return NULL; 
-        //     }
-        // }
-
     } catch (Exception $e) {
         error_log("Error fetching Goods-Out Note for order #: " . $orderId . " in BrightPearl.\n");
         error_log($e->getMessage() . "\n");
@@ -468,5 +521,5 @@ function getBaseUrl() {
 
 createOrderTable();
 sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
-header("Location: " . getBaseUrl() . 'index.php?shop=' . $shopifyStoreName);
+// header("Location: " . getBaseUrl() . 'index.php?shop=' . $shopifyStoreName);
  
