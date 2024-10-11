@@ -1,5 +1,6 @@
 /vendor
 .env
+.dev-env
 error_log
 order-log.txt
 .ftpquota
