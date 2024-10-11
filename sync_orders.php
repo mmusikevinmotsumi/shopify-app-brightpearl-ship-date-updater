@@ -374,7 +374,7 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
         $notes = "";
 
         if (empty($result['response'])){
-            $notes = "Error: No GON fields";
+            $notes = "No GON fields";
             return $notes;
         }
         else{
@@ -412,15 +412,15 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
                     error_log("Response Status Code: " . $statusCode);
                     error_log("Response Body: " . $responseBody);
 
-                    $notes .= "\nNote ID: " . $noteId . ' shipped: 1 packed: 1 picked: 1 printed: 1';
+                    $notes .= "Note ID: " . $noteId . ' shipped: 1 packed: 1 picked: 1 printed: 1';
                 } catch (Exception $e) {
                     error_log("Error updating Goods-Out Note for Note ID:" . $orderId . " in BrightPearl.\n");
                     error_log($e->getMessage() . "\n");
                     if (strpos($e->getMessage(), '409 Conflict') !== false){
-                        $notes .= "\nNote ID: " . $noteId . ' shipped: 1 packed: 1 picked: 1 printed: 1';
+                        $notes .= "Note ID: " . $noteId . ' shipped: 1 packed: 1 picked: 1 printed: 1';
                     }
                     else{
-                        $notes .= "\nNote ID: " . $noteId . "\n" . $e->getMessage(); 
+                        $notes .= "Note ID: " . $noteId . "\n" . $e->getMessage(); 
                     }
                 }
 

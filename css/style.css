@@ -55,7 +55,16 @@ table#leadstbl, th, td {
 .table-top-container form{
     margin: auto;
 }
-.table-top-container button{
+.table-top-container #syncButton{
+    background: rgba(0, 128, 96, 1);
+    color: #FFF;
+    padding: 10px 16px;
+    border: 1px solid;
+    border-radius: 5px;
+    font-size: 14px;
+    cursor: pointer;
+}
+.table-top-container #exportButton{
     background: rgba(0, 128, 96, 1);
     color: #FFF;
     padding: 10px 16px;
@@ -73,5 +82,3 @@ table#leadstbl {
     font-size: 0.75em;
     color: #616161;
 }
-
-
