@@ -77,19 +77,23 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
     $orders = [];
     $page = 1;
     $limit = 250;  // You can adjust the limit to the maximum allowed by Shopify (which is 250)
+
     // $created_at_min = '2022-12-31T18:00:00Z'; 
-    
-    if ($_GET['created_at_min'] !== null && $_GET['created_at_min'] !== '') {
-        $created_at_min = $_GET['created_at_min'];
-    }
-    else{
-        $created_at_min = '2023-01-01T05:00:00Z';
-    }
+    // Get 2:30 AM CST of today 
     date_default_timezone_set('UTC');
     $utcDate = new DateTime('now', new DateTimeZone('UTC'));
     $utcDate->setTimezone(new DateTimeZone('America/Chicago'));
     $utcDate->setTime(2, 30, 0);
     $created_at_max = $utcDate->format('Y-m-d H:i:s');
+
+    if ($_GET['date'] !== null && $_GET['date'] !== '') {
+        $utcDate->modify('-'.$_GET['date'].' days');
+
+        $created_at_min = $utcDate->format('Y-m-d H:i:s');
+    }
+    else{
+        $created_at_min = '2023-01-01T05:00:00Z';
+    }
 
     // $url = $shopifyBaseUrl . "/orders.json?status=any&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
     $url = $shopifyBaseUrl . "/orders.json?status=any&fulfillment_status=shipped&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
@@ -143,7 +147,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
     });
 
     // Prepare the DELETE statement to remove records from the specific date and later
-    $stmt = $conn->prepare("DELETE FROM `" . $shopifyStoreName . "_orders` WHERE created_at >= ?");
+    $stmt = $conn->prepare("DELETE FROM `" . $shopifyStoreName . "_orders` WHERE `created_at` >= ?");
 
     // Bind the date parameter to the statement
     $stmt->bind_param("s", $created_at_min);
