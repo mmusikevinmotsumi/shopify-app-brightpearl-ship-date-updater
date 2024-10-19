@@ -11,30 +11,57 @@ use GuzzleHttp\Client;
 use Dotenv\Dotenv;
 $dotenv = Dotenv::createImmutable(__DIR__);
 $dotenv->load();
+$client = new Client();
+ob_start();
 
 $shopifyApiKey = $_ENV['SHOPIFY_API_KEY'];
 $shopifyPassword = $_ENV['SHOPIFY_PASSWORD'];
-// $shopifyStoreName = $_ENV['SHOPIFY_STORE_NAME'];
 $shopifyStoreName = $_GET['shop'];
 
-if ($shopifyStoreName !== null && $shopifyStoreName !== '') {
+// if ($shopifyStoreName !== null && $shopifyStoreName !== '') {
+//     echo "Store name: " . $shopifyStoreName . "<br>";
+//     $shopifyToken = getAccessToken($conn, $shopifyStoreName);
+//     $tableName = $shopifyStoreName . "_orders";
+// } else {
+//     echo "Store name not found in URL parameter.";
+// }
+
+$pattern = '/^[a-zA-Z0-9\-]+\.myshopify\.com$/';
+
+if (preg_match($pattern, $shopifyStoreName)) {
     echo "Store name: " . $shopifyStoreName . "<br>";
     $shopifyToken = getAccessToken($conn, $shopifyStoreName);
     $tableName = $shopifyStoreName . "_orders";
+    $shopifyBaseUrl = "https://" . $shopifyStoreName . "/admin/api/2024-04";
+    createOrderTable($tableName);
+    sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopifyStoreName, $tableName);
+
+} else if ($shopifyStoreName == "all") {
+    echo "Syncing all stores.<br>";
+    $sql = "SELECT shopify_store_name FROM shop_details WHERE id > 18";
+    $result = $conn->query($sql);
+
+    if ($result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $shopifyStoreName = $row['shopify_store_name'];
+            $shopifyBaseUrl = "https://" . $shopifyStoreName . "/admin/api/2024-04";
+            echo "Syncing store: " . $shopifyStoreName . "\n";
+            $shopifyToken = getAccessToken($conn, $shopifyStoreName);
+            $tableName = $shopifyStoreName . "_orders";
+            createOrderTable($tableName);
+            sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopifyStoreName, $tableName);
+        }
+    } else {
+        echo "No stores found in the 'shop_details' table.";
+    }
+
 } else {
-    echo "Store name not found in URL parameter.";
+    echo "Store name not found in URL parameter or invalid format.";
 }
 
-
-$shopifyBaseUrl = "https://" . $shopifyStoreName . "/admin/api/2024-04";
-
-$client = new Client();
-
-ob_start();
-
-function createOrderTable()
+function createOrderTable($tableName)
 {
-    global $conn, $tableName;
+    global $conn;
 
     // Create table
     $result = $conn->query("SHOW TABLES LIKE '".$tableName."'");
@@ -62,17 +89,17 @@ function createOrderTable()
     }
 }
 
-function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
+function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopifyStoreName, $tableName)
 {   
-    global $conn, $shopifyStoreName, $tableName;
+    global $conn;
 
-    $sql = "TRUNCATE TABLE `".$tableName."`";
+    // $sql = "TRUNCATE TABLE `".$tableName."`";
 
-    if ($conn->query($sql) === TRUE) {
-        // echo "Table $tableName truncated successfully.";
-    } else {
-        echo "Error truncating table: " . $conn->error;
-    }
+    // if ($conn->query($sql) === TRUE) {
+    //     echo "Table $tableName truncated successfully.";
+    // } else {
+    //     echo "Error truncating table: " . $conn->error;
+    // }
 
     $orders = [];
     $page = 1;
@@ -177,7 +204,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
         $synced_at = $created_at_max;
 
         if ($fulfillment_status == 'fulfilled') {
-            list($brightpearl_ECOMSHIP, $brightpearl_GoodsOutNote) = update_brightpearl_fields($client, $order_id, $shipped_at);
+            list($brightpearl_ECOMSHIP, $brightpearl_GoodsOutNote) = update_brightpearl_fields($client, $order_id, $shipped_at, $shopifyStoreName, $tableName);
         } 
         
         $stmt = $conn->prepare("INSERT INTO `" . $shopifyStoreName . "_orders` (
@@ -208,7 +235,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken)
 }
 
 
-function update_brightpearl_fields($client, $order_id, $shipped_at){
+function update_brightpearl_fields($client, $order_id, $shipped_at, $shopifyStoreName, $tableName){
 
     global $brightpearlDevRef;
     global $brightpearlAppRef;
@@ -255,8 +282,8 @@ function update_brightpearl_fields($client, $order_id, $shipped_at){
         error_log($e->getMessage(). "\n");
         if (strpos($responseBody, 'Authorization token expired') !== false) {
             refreshBrightpearlToken($client);
-            createOrderTable();
-            sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
+            createOrderTable($tableName);
+            sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopifyStoreName, $tableName);
         }
         return [$responseBody, $responseBody];
     }
@@ -523,7 +550,5 @@ function getBaseUrl() {
     return $baseUrl;
 }
 
-createOrderTable();
-sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken);
 // header("Location: " . getBaseUrl() . 'index.php?shop=' . $shopifyStoreName);
  
