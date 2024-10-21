@@ -93,20 +93,10 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
 {   
     global $conn;
 
-    // $sql = "TRUNCATE TABLE `".$tableName."`";
-
-    // if ($conn->query($sql) === TRUE) {
-    //     echo "Table $tableName truncated successfully.";
-    // } else {
-    //     echo "Error truncating table: " . $conn->error;
-    // }
-
     $orders = [];
     $page = 1;
     $limit = 250;  // You can adjust the limit to the maximum allowed by Shopify (which is 250)
 
-    // $created_at_min = '2022-12-31T18:00:00Z'; 
-    // Get 2:30 AM CST of today 
     date_default_timezone_set('UTC');
     $utcDate = new DateTime('now', new DateTimeZone('UTC'));
     $utcDate->setTimezone(new DateTimeZone('America/Chicago'));
@@ -120,6 +110,13 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     }
     else{
         $created_at_min = '2023-01-01T05:00:00Z';
+        $sql = "TRUNCATE TABLE `".$tableName."`";
+
+        if ($conn->query($sql) === TRUE) {
+            echo "Table $tableName truncated successfully.";
+        } else {
+            echo "Error truncating table: " . $conn->error;
+        }
     }
 
     // $url = $shopifyBaseUrl . "/orders.json?status=any&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
@@ -172,7 +169,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     usort($orders, function($a, $b) {
         return strcmp($a['created_at'], $b['created_at']);
     });
-
+    
     // Prepare the DELETE statement to remove records from the specific date and later
     $stmt = $conn->prepare("DELETE FROM `" . $shopifyStoreName . "_orders` WHERE `created_at` >= ?");
 
@@ -297,7 +294,7 @@ function check_brightpearl_response($response){
 
     // Check if requests remaining is 0 and if so, pause the app
     if ($requestsRemaining < 5 && $nextThrottlePeriod !== null) {
-        sleep($nextThrottlePeriod / 1000); // Convert milliseconds to seconds
+        sleep($nextThrottlePeriod / 1000 + 1); // Convert milliseconds to seconds
     }
 
 }
@@ -455,25 +452,6 @@ function update_brightpearl_goodsout($client, $orderId, $shipped_at) {
                     }
                 }
 
-                // $notes = $notes . 'Note ID: ' . $noteId . "\n";
-                // if (isset($res['status']['shipped']) && $res['status']['shipped'] == 1) {
-                //     $notes = $notes . 'shipped: ' . $res['status']['shipped'] . "\n";
-                // } 
-                // if (isset($res['status']['packed']) && $res['status']['packed'] == 1) {
-                //     $notes = $notes . 'packed: ' . $res['status']['packed'] . "\n";
-                // }
-                // if (isset($res['status']['picked']) && $res['status']['picked'] == 1) {
-                //     $notes = $notes . 'picked: ' . $res['status']['picked'] . "\n";
-                // }
-                // if (isset($res['status']['printed']) && $res['status']['printed'] == 1) {
-                //     $notes = $notes . 'printed: ' . $res['status']['printed'] . "\n";
-                // }
-                // if (!isset($res['status']['shipped']) && !isset($res['status']['packed']) && !isset($res['status']['picked']) && !isset($res['status']['printed'])) {
-                //     $notes = "Error: None of packed, printed, picked, shipped is set.";
-                // }
-                // if ($res['status']['shipped'] == 0 && $res['status']['packed'] == 0 && $res['status']['picked'] == 0 && $res['status']['printed'] ==0) {
-                //     $notes = "packed:0, printed:0, packed:0, shipped:0";
-                // }
             }
             return $notes;
         }
