@@ -38,7 +38,7 @@ if (preg_match($pattern, $shopifyStoreName)) {
 
 } else if ($shopifyStoreName == "all") {
     echo "Syncing all stores.<br>";
-    $sql = "SELECT shopify_store_name FROM shop_details WHERE id > 18";
+    $sql = "SELECT shopify_store_name FROM shop_details";
     $result = $conn->query($sql);
 
     if ($result->num_rows > 0) {
@@ -101,15 +101,19 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     $utcDate = new DateTime('now', new DateTimeZone('UTC'));
     $utcDate->setTimezone(new DateTimeZone('America/Chicago'));
     $utcDate->setTime(2, 30, 0);
+
     $created_at_max = $utcDate->format('Y-m-d H:i:s');
+    $created_at_max_utc = ($utcDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
 
     if ($_GET['date'] !== null && $_GET['date'] !== '') {
         $utcDate->modify('-'.$_GET['date'].' days');
 
         $created_at_min = $utcDate->format('Y-m-d H:i:s');
+        $created_at_min_utc = ($utcDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+
     }
     else{
-        $created_at_min = '2023-01-01T05:00:00Z';
+        $created_at_min_utc = '2023-01-01T05:00:00Z';
         $sql = "TRUNCATE TABLE `".$tableName."`";
 
         if ($conn->query($sql) === TRUE) {
@@ -120,7 +124,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     }
 
     // $url = $shopifyBaseUrl . "/orders.json?status=any&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
-    $url = $shopifyBaseUrl . "/orders.json?status=any&fulfillment_status=shipped&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
+    $url = $shopifyBaseUrl . "/orders.json?status=any&fulfillment_status=shipped&limit={$limit}&created_at_min={$created_at_min_utc}&created_at_max={$created_at_max_utc}";
 
     do {
         $response = $client->request(
@@ -174,11 +178,11 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     $stmt = $conn->prepare("DELETE FROM `" . $shopifyStoreName . "_orders` WHERE `created_at` >= ?");
 
     // Bind the date parameter to the statement
-    $stmt->bind_param("s", $created_at_min);
+    $stmt->bind_param("s", $created_at_min_utc);
 
     // Execute the statement
     if ($stmt->execute()) {
-        echo "Records with created_at date " . $created_at_min . " and later have been removed.";
+        echo "Records with created_at date " . $created_at_min_utc . " and later have been removed.";
     } else {
         echo "Error removing records: " . $stmt->error;
     }
@@ -293,7 +297,7 @@ function check_brightpearl_response($response){
     $nextThrottlePeriod = isset($headers['brightpearl-next-throttle-period'][0]) ? (int)$headers['brightpearl-next-throttle-period'][0] : null;
 
     // Check if requests remaining is 0 and if so, pause the app
-    if ($requestsRemaining < 5 && $nextThrottlePeriod !== null) {
+    if ($requestsRemaining < 10 && $nextThrottlePeriod !== null) {
         sleep($nextThrottlePeriod / 1000 + 1); // Convert milliseconds to seconds
     }
 
