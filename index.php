@@ -98,10 +98,12 @@
             echo "<table border='1' id='leadstbl'>";
             echo "<tr><th>ID</th><th>Order ID</th><th>Created At</th><th>Ship Date</th><th>Total Price</th><th>Payment Status</th><th>Fulfillment Status</th><th>Brightpearl PCF_ECOMSHIP</th><th>Brightpearl_GoodsOutNote</th><th>Synced at</th></tr>";
 
+            $index = 1; // Start from 1
+
             // Output data for each row
             while ($row = $result->fetch_assoc()) {
                 echo "<tr>";
-                echo "<td>" . $row['id'] . "</td>";
+                echo "<td>" . $index . "</td>";
                 echo "<td>" . $row['order_id'] . "</td>";
                 echo "<td>" . $row['created_at'] . "</td>";
                 echo "<td>" . $row['shipped_at'] . "</td>";
@@ -112,6 +114,9 @@
                 echo "<td>" . $row['brightpearl_GoodsOutNote'] . "</td>";
                 echo "<td>" . $row['synced_at'] . "</td>";
                 echo "</tr>";
+
+                $index++; // Increment the counter
+
             }
             echo "</table></div>";
         } else {
