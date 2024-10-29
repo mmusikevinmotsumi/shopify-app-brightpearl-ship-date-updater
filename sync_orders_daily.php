@@ -21,46 +21,26 @@ $brightpearlApiToken = $_ENV['BRIGHTPEARL_API_TOKEN'];
 $brightpearlRefreshToken = $_ENV['BRIGHTPEARL_REFRESH_TOKEN'];
 
 
-// if ($shopifyStoreName !== null && $shopifyStoreName !== '') {
-//     echo "Store name: " . $shopifyStoreName . "<br>";
-//     $shopifyToken = getAccessToken($conn, $shopifyStoreName);
-//     $tableName = $shopifyStoreName . "_orders";
-// } else {
-//     echo "Store name not found in URL parameter.";
-// }
+echo "Syncing all stores.<br>";
+$sql = "SELECT shopify_store_name FROM shop_details";
+$result = $conn->query($sql);
 
-$pattern = '/^[a-zA-Z0-9\-]+\.myshopify\.com$/';
-
-if (preg_match($pattern, $shopifyStoreName)) {
-    echo "Store name: " . $shopifyStoreName . "<br>";
-    $shopifyToken = getAccessToken($conn, $shopifyStoreName);
-    $tableName = $shopifyStoreName . "_orders";
-    $shopifyBaseUrl = "https://" . $shopifyStoreName . "/admin/api/2024-04";
-    createOrderTable($tableName);
-    sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopifyStoreName, $tableName);
-
-} else if ($shopifyStoreName == "all") {
-    echo "Syncing all stores.<br>";
-    $sql = "SELECT shopify_store_name FROM shop_details";
-    $result = $conn->query($sql);
-
-    if ($result->num_rows > 0) {
-        while ($row = $result->fetch_assoc()) {
-            $shopifyStoreName = $row['shopify_store_name'];
-            $shopifyBaseUrl = "https://" . $shopifyStoreName . "/admin/api/2024-04";
-            echo "Syncing store: " . $shopifyStoreName . "\n";
-            $shopifyToken = getAccessToken($conn, $shopifyStoreName);
-            $tableName = $shopifyStoreName . "_orders";
-            createOrderTable($tableName);
-            sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopifyStoreName, $tableName);
-        }
-    } else {
-        echo "No stores found in the 'shop_details' table.";
+if ($result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $shopifyStoreName = $row['shopify_store_name'];
+        $shopifyBaseUrl = "https://" . $shopifyStoreName . "/admin/api/2024-04";
+        echo 'Current server time: ' . date('Y-m-d H:i:s') . '<br>';
+        echo 'Timezone: ' . date_default_timezone_get(). '<br>';
+        echo "Syncing store: " . $shopifyStoreName . '<br>';
+        $shopifyToken = getAccessToken($conn, $shopifyStoreName);
+        $tableName = $shopifyStoreName . "_orders";
+        createOrderTable($tableName);
+        sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopifyStoreName, $tableName);
     }
-
 } else {
-    echo "Store name not found in URL parameter or invalid format.";
+    echo "No stores found in the 'shop_details' table.";
 }
+
 
 function createOrderTable($tableName)
 {
@@ -108,23 +88,10 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     $created_at_max = $utcDate->format('Y-m-d H:i:s');
     $created_at_max_utc = ($utcDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
 
-    if ($_GET['date'] !== null && $_GET['date'] !== '') {
-        $utcDate->modify('-'.$_GET['date'].' days');
-        $created_at_min_utc = ($utcDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
-        $created_at_min = ($utcDate->setTimezone(new DateTimeZone('America/Chicago')))->format('Y-m-d H:i:s');
-    }
-    else{
-        $created_at_min_utc = '2023-01-01T05:00:00Z';
-        $sql = "TRUNCATE TABLE `".$tableName."`";
+    $utcDate->modify('-30 days');
+    $created_at_min_utc = ($utcDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+    $created_at_min = ($utcDate->setTimezone(new DateTimeZone('America/Chicago')))->format('Y-m-d H:i:s');
 
-        if ($conn->query($sql) === TRUE) {
-            echo "Table $tableName truncated successfully.";
-        } else {
-            echo "Error truncating table: " . $conn->error;
-        }
-    }
-
-    // $url = $shopifyBaseUrl . "/orders.json?status=any&limit={$limit}&created_at_min={$created_at_min}&created_at_max={$created_at_max}";
     $url = $shopifyBaseUrl . "/orders.json?status=any&fulfillment_status=shipped&limit={$limit}&created_at_min={$created_at_min_utc}&created_at_max={$created_at_max_utc}";
 
     do {
@@ -232,6 +199,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     
         $stmt->close();
     }
+    
     $sql = "UPDATE `" . $tableName. "` SET synced_at = '" . $created_at_max . "'";
 
     // Execute the query
@@ -240,7 +208,6 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     } else {
         echo "Error updating rows: " . $conn->error . "<br>";
     }
-    // $conn->close();
 }
 
 

@@ -101,6 +101,7 @@
             $index = 1; // Start from 1
 
             // Output data for each row
+        
             while ($row = $result->fetch_assoc()) {
                 echo "<tr>";
                 echo "<td>" . $index . "</td>";
@@ -112,6 +113,7 @@
                 echo "<td>" . $row['fulfillment_status'] . "</td>";
                 echo "<td>" . $row['brightpearl_ECOMSHIP'] . "</td>";
                 echo "<td>" . $row['brightpearl_GoodsOutNote'] . "</td>";
+                // echo "<td>" . $last_sync . "</td>";
                 echo "<td>" . $row['synced_at'] . "</td>";
                 echo "</tr>";
 
