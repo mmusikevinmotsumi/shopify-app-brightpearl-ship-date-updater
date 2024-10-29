@@ -112,6 +112,7 @@
                 echo "<td>" . $row['fulfillment_status'] . "</td>";
                 echo "<td>" . $row['brightpearl_ECOMSHIP'] . "</td>";
                 echo "<td>" . $row['brightpearl_GoodsOutNote'] . "</td>";
+                // echo "<td>" . $last_sync . "</td>";
                 echo "<td>" . $row['synced_at'] . "</td>";
                 echo "</tr>";
 
