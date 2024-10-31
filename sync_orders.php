@@ -42,7 +42,7 @@ if (preg_match($pattern, $shopifyStoreName)) {
 } else if ($shopifyStoreName == "all") {
     echo "Syncing all stores.<br>";
     $sql = "SELECT shopify_store_name FROM shop_details";
-    $sql = "SELECT shopify_store_name FROM shop_details WHERE id > 18";
+    $sql = "SELECT shopify_store_name FROM shop_details WHERE id > 31";
     $result = $conn->query($sql);
 
     if ($result->num_rows > 0) {
@@ -101,18 +101,17 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     $page = 1;
     $limit = 250;  // You can adjust the limit to the maximum allowed by Shopify (which is 250)
 
-    date_default_timezone_set('UTC');
-    $utcDate = new DateTime('now', new DateTimeZone('UTC'));
-    $utcDate->setTimezone(new DateTimeZone('America/Chicago'));
-    $utcDate->setTime(3, 0, 0);
+    date_default_timezone_set('America/Chicago');
+    $cstDate = new DateTime();
+    $cstDate->setTime(3, 0, 0);
+    $created_at_max = $cstDate->format('Y-m-d H:i:s');
+    $created_at_max_utc = ($cstDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
 
-    $created_at_max = $utcDate->format('Y-m-d H:i:s');
-    $created_at_max_utc = ($utcDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
 
     if ($_GET['date'] !== null && $_GET['date'] !== '') {
-        $utcDate->modify('-'.$_GET['date'].' days');
-        $created_at_min_utc = ($utcDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
-        $created_at_min = ($utcDate->setTimezone(new DateTimeZone('America/Chicago')))->format('Y-m-d H:i:s');
+        $cstDate->modify('-'.$_GET['date'].' days');
+        $created_at_min_utc = ($cstDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        $created_at_min = ($cstDate->setTimezone(new DateTimeZone('America/Chicago')))->format('Y-m-d H:i:s');
     }
     else{
         $created_at_min_utc = '2023-01-01T05:00:00Z';
@@ -234,14 +233,14 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
         $stmt->close();
     }
     
-    $sql = "UPDATE `" . $tableName. "` SET synced_at = '" . $created_at_max . "'";
+    // $sql = "UPDATE `" . $tableName. "` SET `synced_at` = '" . $created_at_max . "'";
 
-    // Execute the query
-    if ($conn->query($sql) === TRUE) {
-        echo "All rows updated successfully!<br>";
-    } else {
-        echo "Error updating rows: " . $conn->error . "<br>";
-    }
+    // // Execute the query
+    // if ($conn->query($sql) === TRUE) {
+    //     echo "All rows updated successfully!<br>";
+    // } else {
+    //     echo "Error updating rows: " . $conn->error . "<br>";
+    // }
 
     // $conn->close();
 }

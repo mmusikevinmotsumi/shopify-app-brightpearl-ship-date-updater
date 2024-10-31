@@ -49,8 +49,8 @@ table#leadstbl, th, td {
     max-width: 1200px;
     align-items: center;
 }
-.table-top-container p{
-    flex: 1 1 0%;
+.table-top-container .store-info{
+    flex: 1 0%;
 }
 .table-top-container form{
     margin: auto;
