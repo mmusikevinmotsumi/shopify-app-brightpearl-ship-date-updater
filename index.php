@@ -84,10 +84,13 @@
 
         if ($result->num_rows > 0) {
             // Display order details in a table
-            echo '<div class="content"><div class="table-top-container"><p>Store name: ' . $shopifyStoreName . '<br><p>Total orders fetched: ' . $result->num_rows . '</p>';
-            // echo '<form id="syncForm" action="https://soodletech.com/brightpearl-ship-date-updater/sync_orders.php?shop=' . $shopifyStoreName . '" method="post">
-            //         <button id="syncButton" type="submit" name="resync_orders">Sync All Orders</button>
-            //       </form>';
+            $row = $result->fetch_assoc();
+            $lastSyncedAt = $row['synced_at'];
+        
+            echo '<div class="content"><div class="table-top-container"><div class="store-info">';
+            echo '<p>Store name: ' . $shopifyStoreName . '<br>';
+            echo '<p>Total orders fetched: ' . $result->num_rows . '</p>';
+            echo '<p>Last sync: ' . $lastSyncedAt . '</p></div>';
 
             // Add the Export to CSV button
             echo '<form action="" method="post">
@@ -123,7 +126,11 @@
             echo "</table></div>";
         } else {
             // Handle case where no orders are found
-            echo '<div class="content"><div class="table-top-container"><p>Total orders fetched: ' . $result->num_rows . '</p>';
+            echo '<div class="content"><div class="table-top-container"><div class="store-info">';
+            echo '<p>Store name: ' . $shopifyStoreName . '<br>';
+            echo '<p>Total orders fetched: ' . $result->num_rows . '</p>';
+            echo '<p>Last sync: ' . $lastSyncedAt . '</p></div>';
+
             echo '<form id="syncForm" action="https://soodletech.com/brightpearl-ship-date-updater/sync_orders.php?shop=' . $shopifyStoreName . '" method="post">
                 <button id="syncButton" type="submit" name="resync_orders">Sync All Orders</button>
               </form></div>';

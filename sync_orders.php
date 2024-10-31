@@ -232,14 +232,14 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     
         $stmt->close();
     }
-    $sql = "UPDATE `" . $tableName. "` SET synced_at = '" . $created_at_max . "'";
+    // $sql = "UPDATE `" . $tableName. "` SET `synced_at` = '" . $created_at_max . "'";
 
-    // Execute the query
-    if ($conn->query($sql) === TRUE) {
-        echo "All rows updated successfully!<br>";
-    } else {
-        echo "Error updating rows: " . $conn->error . "<br>";
-    }
+    // // Execute the query
+    // if ($conn->query($sql) === TRUE) {
+    //     echo "All rows updated successfully!<br>";
+    // } else {
+    //     echo "Error updating rows: " . $conn->error . "<br>";
+    // }
     // $conn->close();
 }
 
