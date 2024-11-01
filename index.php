@@ -80,13 +80,16 @@
     // Function to get orders from the database and display them in HTML
     function get_orders_from_database(){
         global $conn, $tableName, $shopifyStoreName;
+
+        // Get the last synced date directly
+        $lastSyncedAt = "";
+        $lastSyncResult = $conn->query("SELECT synced_at FROM `" . $tableName . "` ORDER BY synced_at DESC LIMIT 1");
+        $lastSyncedAt = $lastSyncResult->fetch_assoc()['synced_at'] ?? 'No sync date available';
+
         $result = $conn->query("SELECT * FROM `" . $tableName . "`");
 
         if ($result->num_rows > 0) {
-            // Display order details in a table
-            $row = $result->fetch_assoc();
-            $lastSyncedAt = $row['synced_at'];
-        
+            // Display order details in a table        
             echo '<div class="content"><div class="table-top-container"><div class="store-info">';
             echo '<p>Store name: ' . $shopifyStoreName . '<br>';
             echo '<p>Total orders fetched: ' . $result->num_rows . '</p>';
