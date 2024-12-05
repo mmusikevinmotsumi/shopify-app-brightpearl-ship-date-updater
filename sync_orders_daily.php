@@ -86,7 +86,7 @@ function sync_orders_to_database($client, $shopifyBaseUrl, $shopifyToken, $shopi
     $created_at_max = $cstDate->format('Y-m-d H:i:s');
     $created_at_max_utc = ($cstDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
 
-    $cstDate->modify('-30 days');
+    $cstDate->modify('-60 days');
     $created_at_min_utc = ($cstDate->setTimezone(new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
     $created_at_min = ($cstDate->setTimezone(new DateTimeZone('America/Chicago')))->format('Y-m-d H:i:s');
     $url = $shopifyBaseUrl . "/orders.json?status=any&fulfillment_status=shipped&limit={$limit}&created_at_min={$created_at_min_utc}&created_at_max={$created_at_max_utc}";
